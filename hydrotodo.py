@@ -160,7 +160,7 @@ def main(stdscr):
 
         # Verificação de resolução mínima
         min_width = 80
-        min_height = 24
+        min_height = 30
         if width < min_width or height < min_height:
             msg = f"Resolução atual: {width}x{height} | Mínima: {min_width}x{min_height}"
             stdscr.clear()
