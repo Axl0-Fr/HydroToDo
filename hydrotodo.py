@@ -3,7 +3,7 @@ import sqlite3
 import os
 
 # HydroToDo Stable
-# Caracteres para borda arredondada
+# Characters for rounded border
 TL = '╭'
 TR = '╮'
 BL = '╰'
@@ -31,7 +31,7 @@ def init_db():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     text TEXT NOT NULL,
                     done INTEGER NOT NULL DEFAULT 0,
-                    category TEXT NOT NULL DEFAULT 'Geral'
+                    category TEXT NOT NULL DEFAULT 'General'
                 )''')
     c.execute('''CREATE TABLE IF NOT EXISTS deleted_categories (
                     name TEXT PRIMARY KEY
@@ -39,12 +39,12 @@ def init_db():
     c.execute("PRAGMA table_info(todos)")
     columns = [row[1] for row in c.fetchall()]
     if 'category' not in columns:
-        c.execute("ALTER TABLE todos ADD COLUMN category TEXT NOT NULL DEFAULT 'Geral'")
+        c.execute("ALTER TABLE todos ADD COLUMN category TEXT NOT NULL DEFAULT 'General'")
     conn.commit()
     conn.close()
 
 
-def load_todos(category='Geral'):
+def load_todos(category='General'):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT id, text, done FROM todos WHERE category = ?', (category,))
@@ -53,7 +53,7 @@ def load_todos(category='Geral'):
     return todos
 
 
-def add_todo(text, category='Geral'):
+def add_todo(text, category='General'):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('INSERT INTO todos (text, done, category) VALUES (?, 0, ?)', (text, category))
@@ -118,21 +118,21 @@ def get_all_categories():
     deleted = set(row[0] for row in c.fetchall())
     conn.close()
     filtered = [cat for cat in cats if cat not in deleted]
-    return filtered if filtered else ['Geral']
+    return filtered if filtered else ['General']
 
 
 def main(stdscr):
     curses.curs_set(0)
     stdscr.clear()
     curses.start_color()
-    curses.use_default_colors()  # Habilita o uso das cores padrão do terminal
-    curses.init_pair(1, curses.COLOR_BLACK, -1)  # -1 significa usar a cor padrão do terminal
+    curses.use_default_colors()  # Enable using default terminal colors
+    curses.init_pair(1, curses.COLOR_BLACK, -1)  # -1 means use default terminal color
     curses.init_pair(2, curses.COLOR_YELLOW, -1)
     curses.init_pair(3, curses.COLOR_GREEN, -1)
     curses.init_pair(4, curses.COLOR_MAGENTA, -1)
 
     init_db()
-    # Estrutura para abas
+    # Structure for tabs
     tab_categories = get_all_categories()
     tabs = [load_todos(cat) for cat in tab_categories]
     current_tab = 0
@@ -141,35 +141,35 @@ def main(stdscr):
 
     show_help = False
     help_lines = [
-        "Comandos disponíveis:",
+        "Available commands:",
         "",
-        "↑↓         Navegar entre tarefas",
-        "Enter      Marcar/desmarcar tarefa",
-        "a          Adicionar nova tarefa",
-        "d          Deletar tarefa selecionada",
-        "Ctrl+T     Nova aba",
-        "Ctrl+W     Fechar aba",
-        "←/→        Trocar aba",
-        "h          Mostrar/ocultar ajuda",
-        "q          Sair do programa",
+        "↑↓         Navigate between tasks",
+        "Enter      Mark/unmark task",
+        "a          Add new task",
+        "d          Delete selected task",
+        "Ctrl+T     New tab",
+        "Ctrl+W     Close tab",
+        "←/→        Switch tab",
+        "h          Show/hide help",
+        "q          Quit program",
     ]
 
     while True:
         stdscr.clear()
         height, width = stdscr.getmaxyx()
 
-        # Verificação de resolução mínima
+        # Minimum resolution check
         min_width = 80
         min_height = 30
         if width < min_width or height < min_height:
-            msg = f"Resolução atual: {width}x{height} | Mínima: {min_width}x{min_height}"
+            msg = f"Current resolution: {width}x{height} | Minimum: {min_width}x{min_height}"
             stdscr.clear()
             msg_x = max(0, min(width - 1, (width - len(msg)) // 2))
             msg_y = min(height - 1, height // 2)
             try:
                 stdscr.addstr(msg_y, msg_x, msg[:max(0, width - msg_x)], curses.color_pair(2) | curses.A_BOLD)
             except curses.error:
-                pass  # ignora se a tela for tão pequena que nem dá pra desenhar
+                pass  # ignores if the screen is too small to even draw
             stdscr.refresh()
             key = stdscr.getch()
             if key in (ord('q'), 3):  # 'q', Ctrl+C
@@ -177,17 +177,17 @@ def main(stdscr):
             continue
 
 
-        # Caixa do título
+        # Title box
         title_box_w = max(len(line) for line in ASCII_TITLE) + 4
         title_box_h = len(ASCII_TITLE) + 2
-        # Garante que o box não ultrapasse os limites da tela
+        # Ensures that the box does not exceed screen limits
         if title_box_w > width:
             title_box_w = width - 2 if width > 2 else width
         if title_box_h > height:
             title_box_h = height - 2 if height > 2 else height
         title_box_x = max(0, (width - title_box_w) // 2)
         title_box_y = 1
-        # Só desenha se couber na tela
+        # Only draws if it fits on screen
         if title_box_y + title_box_h < height and title_box_x + title_box_w < width:
             draw_rounded_box(stdscr, title_box_y, title_box_x, title_box_h, title_box_w)
             for i, line in enumerate(ASCII_TITLE):
@@ -195,16 +195,16 @@ def main(stdscr):
                     stdscr.addstr(title_box_y + 1 + i, title_box_x + 2, line[:max(0, width - title_box_x - 4)], curses.color_pair(3) | curses.A_BOLD)
 
         if show_help:
-            # Tela de ajuda centralizada, mas um pouco mais para baixo
+            # Centered help screen, but slightly lower
             help_w = max(len(line) for line in help_lines) + 4
             help_h = len(help_lines) + 2
             help_x = (width - help_w) // 2
-            help_y = max(2, (height - help_h) // 2 + height // 10)  # desloca para baixo
+            help_y = max(2, (height - help_h) // 2 + height // 10)  # offset downwards
             draw_rounded_box(stdscr, help_y, help_x, help_h, help_w)
             for i, line in enumerate(help_lines):
                 stdscr.addstr(help_y + 1 + i, help_x + 2, line, curses.color_pair(2) | curses.A_BOLD)
         else:
-            # Abas no topo (melhor destaque)
+            # Tabs at the top (better highlight)
             tab_strs = []
             for i, cat in enumerate(tab_categories):
                 if i == current_tab:
@@ -214,14 +214,14 @@ def main(stdscr):
             tab_bar = " ".join(tab_strs)
             stdscr.addstr(title_box_y + title_box_h, max(0, (width - len(tab_bar)) // 2), tab_bar, curses.color_pair(2) | curses.A_BOLD)
 
-            # Caixa principal da aba
+            # Main tab box
             box_w = min(50, width - 4)
             box_h = min(max(10, len(tabs[current_tab]) + 5), height - title_box_h - 7)
             box_x = (width - box_w) // 2
             box_y = title_box_y + title_box_h + 2
             draw_rounded_box(stdscr, box_y, box_x, box_h, box_w)
             todos = tabs[current_tab]
-            # Garante que o índice selecionado está dentro do tamanho da lista
+            # Ensures the selected index is within the list size
             if current_indices[current_tab] >= len(todos):
                 current_indices[current_tab] = max(0, len(todos) - 1)
             current_index = current_indices[current_tab]
@@ -239,7 +239,7 @@ def main(stdscr):
                 start = 0
                 end = len(todos)
             if len(todos) == 0:
-                msg = "Nenhuma tarefa ainda..."
+                msg = "No tasks yet..."
                 msg_y = box_y + (box_h // 2)
                 msg_x = box_x + ((box_w - len(msg)) // 2)
                 stdscr.addstr(msg_y, msg_x, msg, curses.color_pair(2) | curses.A_BOLD)
@@ -251,24 +251,24 @@ def main(stdscr):
                         line = prefix + todo['text']
                         attr = curses.color_pair(1) | curses.A_BOLD if i == current_index else 0
                         stdscr.addstr(box_y + 2 + idx, box_x + 2, line[:box_w-4], attr)
-            # Indicadores de scroll
+            # Scroll indicators
             if start > 0:
                 stdscr.addstr(box_y + 1, box_x + box_w - 3, '↑', curses.color_pair(2) | curses.A_BOLD)
             if end < len(todos):
                 stdscr.addstr(box_y + box_h - 2, box_x + box_w - 3, '↓', curses.color_pair(2) | curses.A_BOLD)
 
-        # Comando de ajuda minimalista
-        help_hint = "Pressione 'h' para ajuda"
+        # Minimal help command
+        help_hint = "Press 'h' for help"
         stdscr.addstr(height - 2, max(0, (width - len(help_hint)) // 2), help_hint, curses.color_pair(4) | curses.A_BOLD)
 
         stdscr.refresh()
         key = stdscr.getch()
 
-        # Atalhos de abas
+        # Tab shortcuts
         if key == 20:  # Ctrl+T
             if len(tabs) < max_tabs:
                 curses.echo()
-                prompt = "Nome da nova categoria: "
+                prompt = "New category name: "
                 stdscr.addstr(height - 4, 2, " " * (width - 4))
                 stdscr.addstr(height - 4, 2, prompt, curses.A_BOLD)
                 stdscr.refresh()
@@ -317,11 +317,11 @@ def main(stdscr):
             if 0 <= idx < len(todos):
                 todos[idx]['done'] = not todos[idx]['done']
                 update_todo_done(todos[idx]['id'], todos[idx]['done'])
-                # Atualiza a lista da aba
+                # Update tab list
                 tabs[current_tab] = load_todos(tab_categories[current_tab])
         elif key == ord('a'):
             curses.echo()
-            prompt = "Nova tarefa: "
+            prompt = "New task: "
             box_y = title_box_y + title_box_h + 2
             box_x = (width - min(50, width - 4)) // 2
             box_w = min(50, width - 4)
@@ -341,7 +341,7 @@ def main(stdscr):
             if 0 <= idx < len(todos):
                 delete_todo(todos[idx]['id'])
                 tabs[current_tab] = load_todos(tab_categories[current_tab])
-                # Ajusta o índice para não ultrapassar o tamanho da lista
+                # Adjust index so it does not exceed list size
                 if current_indices[current_tab] >= len(tabs[current_tab]):
                     current_indices[current_tab] = max(0, len(tabs[current_tab]) - 1)
 
@@ -349,4 +349,4 @@ if __name__ == "__main__":
     try:
         curses.wrapper(main)
     except KeyboardInterrupt:
-        pass  # Sai silenciosamente ao pressionar Ctrl+C
+        pass  # Exits silently on Ctrl+C
