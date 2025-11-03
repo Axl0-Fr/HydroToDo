@@ -11,7 +11,7 @@ BR = '╯'
 H  = '─'
 V  = '│'
 
-DB_PATH = os.path.join(os.path.dirname(__file__), '.todos.db')
+DB_PATH = os.path.join(os.path.expanduser("~"), '.hydrotodo.db')
 
 ASCII_TITLE = [
     "██╗  ██╗██╗   ██╗██████╗ ██████╗  ██████╗ ████████╗ ██████╗ ██████╗  ██████╗ ",
