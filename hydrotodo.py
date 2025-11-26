@@ -318,24 +318,39 @@ def main(stdscr):
     max_tabs = 10
     current_indices = [0 for _ in tab_categories]
 
+    # fzf-style preview pane state
+    show_preview = True  # Preview pane visible by default
+    preview_scroll = 0   # Scroll offset within preview pane
+
     show_help = False
     help_lines = [
         "Available commands:",
         "",
-        "↑↓         Navigate between tasks",
-        "Enter      Mark/unmark task",
-        "a          Add new task",
-        "d          Delete selected task",
-        "n          Edit notes for task",
-        "Ctrl+T     New tab",
-        "Ctrl+W     Close tab",
-        "←/→        Switch tab",
-        "h          Show/hide help",
-        "q          Quit program",
+        "Navigation:",
+        "↑↓ / Ctrl+P/N  Navigate between tasks",
+        "Enter          Mark/unmark task (confirm)",
+        "←/→            Switch tab",
+        "",
+        "Preview pane:",
+        "Alt+P          Toggle preview pane",
+        "Alt+J/K        Scroll preview down/up",
+        "",
+        "Task management:",
+        "a              Add new task",
+        "d              Delete selected task",
+        "n              Edit notes for task",
+        "",
+        "Tabs:",
+        "Ctrl+T         New tab",
+        "Ctrl+W         Close tab",
+        "",
+        "Other:",
+        "h              Show/hide help",
+        "q              Quit program",
         "",
         "In notes editor:",
-        "Ctrl+F     Save notes",
-        "Esc        Cancel editing",
+        "Ctrl+F         Save notes",
+        "Esc            Cancel editing",
     ]
 
     while True:
@@ -400,8 +415,12 @@ def main(stdscr):
 
             # Calculate available space for task box and detail panel
             available_height = height - title_box_h - 6  # Leave room for help hint
-            box_h = 8  # Shorter fixed height for task box
-            detail_panel_h = max(10, available_height - box_h - 1)  # Detail panel gets remaining space
+            if show_preview:
+                box_h = 8  # Shorter fixed height for task box when preview is shown
+                detail_panel_h = max(10, available_height - box_h - 1)  # Detail panel gets remaining space
+            else:
+                box_h = available_height  # Task box takes all space when preview is hidden
+                detail_panel_h = 0
 
             # Main tab box (same width as title box)
             box_w = title_box_w
@@ -457,13 +476,14 @@ def main(stdscr):
             if end < len(todos):
                 stdscr.addstr(box_y + box_h - 2, box_x + box_w - 3, '↓', curses.color_pair(2) | curses.A_BOLD)
 
-            # Detail panel below task box
-            detail_y = box_y + box_h + 1
-            detail_w = box_w
-            detail_x = box_x
-            draw_rounded_box(stdscr, detail_y, detail_x, detail_panel_h, detail_w)
+            # Detail panel below task box (only if preview is enabled)
+            if show_preview and detail_panel_h > 0:
+                detail_y = box_y + box_h + 1
+                detail_w = box_w
+                detail_x = box_x
+                draw_rounded_box(stdscr, detail_y, detail_x, detail_panel_h, detail_w)
 
-            if len(todos) > 0 and 0 <= current_index < len(todos):
+            if show_preview and detail_panel_h > 0 and len(todos) > 0 and 0 <= current_index < len(todos):
                 selected_todo = todos[current_index]
                 detail_text_w = detail_w - 4
 
@@ -519,11 +539,17 @@ def main(stdscr):
                         wrapped = wrap_text(note_line, detail_text_w) if note_line else ['']
                         all_notes_lines.extend(wrapped)
 
-                # Display notes with scrolling (auto-scroll to show content)
+                # Display notes with scrolling (controlled by preview_scroll via Alt-j/Alt-k)
                 if all_notes_lines:
                     total_notes_lines = len(all_notes_lines)
-                    # For now, show from the beginning (scrolling will be in edit mode)
-                    notes_start = 0
+                    # Clamp preview_scroll to valid range
+                    max_scroll = max(0, total_notes_lines - max_notes_lines)
+                    if preview_scroll > max_scroll:
+                        preview_scroll = max_scroll
+                    if preview_scroll < 0:
+                        preview_scroll = 0
+
+                    notes_start = preview_scroll
                     notes_end = min(notes_start + max_notes_lines, total_notes_lines)
 
                     for i, line in enumerate(all_notes_lines[notes_start:notes_end]):
@@ -536,7 +562,14 @@ def main(stdscr):
                         stdscr.addstr(notes_start_y + max_notes_lines - 1, detail_x + detail_w - 3, '↓', curses.color_pair(2) | curses.A_BOLD)
                 else:
                     stdscr.addstr(notes_start_y, detail_x + 2, "(no notes)", curses.color_pair(1))
-            else:
+
+                # Mini guide at the bottom of detail panel (centered)
+                guide_text = "Alt-j/k: scroll │ Alt-p: toggle"
+                guide_x = detail_x + (detail_w - len(guide_text)) // 2
+                guide_y = detail_y + detail_panel_h - 2
+                stdscr.addstr(guide_y, guide_x, guide_text, curses.color_pair(1))
+
+            elif show_preview and detail_panel_h > 0:
                 # No task selected
                 msg = "Select a task to view details"
                 stdscr.addstr(detail_y + detail_panel_h // 2, detail_x + (detail_w - len(msg)) // 2, msg, curses.color_pair(1))
@@ -548,8 +581,40 @@ def main(stdscr):
         stdscr.refresh()
         key = stdscr.getch()
 
+        # Handle Alt key combinations (ESC followed by another key)
+        if key == 27:  # ESC - could be escape or start of Alt sequence
+            stdscr.nodelay(True)
+            next_key = stdscr.getch()
+            stdscr.nodelay(False)
+            if next_key == -1:
+                # Just ESC pressed, no action (or could be used elsewhere)
+                pass
+            elif next_key == ord('p'):
+                # Alt-p: toggle preview pane
+                show_preview = not show_preview
+                preview_scroll = 0  # Reset scroll when toggling
+            elif next_key == ord('j'):
+                # Alt-j: scroll preview pane down
+                if show_preview:
+                    preview_scroll += 1
+            elif next_key == ord('k'):
+                # Alt-k: scroll preview pane up
+                if show_preview and preview_scroll > 0:
+                    preview_scroll -= 1
+            continue  # Skip rest of key handling for Alt sequences
+
+        # Ctrl-n / Ctrl-p for task list navigation (fzf-style)
+        if key == 14:  # Ctrl+N - next task
+            if current_indices[current_tab] < len(tabs[current_tab]) - 1:
+                current_indices[current_tab] += 1
+                preview_scroll = 0  # Reset preview scroll when changing task
+        elif key == 16:  # Ctrl+P - previous task
+            if current_indices[current_tab] > 0:
+                current_indices[current_tab] -= 1
+                preview_scroll = 0  # Reset preview scroll when changing task
+
         # Tab shortcuts
-        if key == 20:  # Ctrl+T
+        elif key == 20:  # Ctrl+T
             if len(tabs) < max_tabs:
                 cat = get_wrapped_input(stdscr, height - 4, 2, width - 4, 1, "New category name: ").strip()
                 if cat and cat not in tab_categories:
@@ -586,9 +651,11 @@ def main(stdscr):
         elif key == curses.KEY_UP:
             if current_indices[current_tab] > 0:
                 current_indices[current_tab] -= 1
+                preview_scroll = 0  # Reset preview scroll when changing task
         elif key == curses.KEY_DOWN:
             if current_indices[current_tab] < len(tabs[current_tab]) - 1:
                 current_indices[current_tab] += 1
+                preview_scroll = 0  # Reset preview scroll when changing task
         elif key == ord('\n') and tabs[current_tab]:
             todos = tabs[current_tab]
             idx = current_indices[current_tab]
