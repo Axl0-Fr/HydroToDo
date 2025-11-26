@@ -109,6 +109,65 @@ def draw_rounded_box(win, y, x, h, w):
     win.addstr(y + h - 1, x, BL + H * (w - 2) + BR)
 
 
+def wrap_text(text, width):
+    """Wrap text to fit within a given width, returning a list of lines."""
+    if width <= 0:
+        return [text]
+    lines = []
+    while len(text) > width:
+        # Find the last space within the width limit
+        split_at = text.rfind(' ', 0, width)
+        if split_at == -1:
+            # No space found, hard break at width
+            split_at = width
+        lines.append(text[:split_at])
+        text = text[split_at:].lstrip()
+    if text:
+        lines.append(text)
+    return lines if lines else ['']
+
+
+def get_wrapped_input(stdscr, start_y, start_x, width, max_lines, prompt=""):
+    """Get user input with text wrapping support."""
+    curses.curs_set(2)  # Block cursor
+    text = ""
+
+    while True:
+        # Clear the input area
+        for i in range(max_lines):
+            stdscr.addstr(start_y + i, start_x, " " * width)
+
+        # Display prompt and wrapped text
+        full_text = prompt + text
+        wrapped = wrap_text(full_text, width)
+
+        for i, line in enumerate(wrapped[:max_lines]):
+            stdscr.addstr(start_y + i, start_x, line)
+
+        # Position cursor at the end of text
+        if wrapped:
+            cursor_line = min(len(wrapped) - 1, max_lines - 1)
+            cursor_col = len(wrapped[cursor_line])
+            stdscr.move(start_y + cursor_line, start_x + cursor_col)
+
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key == ord('\n'):  # Enter - submit
+            break
+        elif key == 27:  # Escape - cancel
+            text = ""
+            break
+        elif key in (curses.KEY_BACKSPACE, 127, 8):  # Backspace
+            if text:
+                text = text[:-1]
+        elif key >= 32 and key <= 126:  # Printable ASCII
+            text += chr(key)
+
+    curses.curs_set(0)  # Hide cursor
+    return text
+
+
 def get_all_categories():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -244,13 +303,25 @@ def main(stdscr):
                 msg_x = box_x + ((box_w - len(msg)) // 2)
                 stdscr.addstr(msg_y, msg_x, msg, curses.color_pair(2) | curses.A_BOLD)
             elif len(todos) > 0:
+                display_line = 0
+                text_width = box_w - 4  # Account for border and padding
+                indent = "    "  # Indent for wrapped lines (same width as prefix)
                 for idx, i in enumerate(range(start, end)):
-                    if 0 <= i < len(todos):
+                    if 0 <= i < len(todos) and display_line < max_visible:
                         todo = todos[i]
                         prefix = "[X] " if todo['done'] else "[ ] "
-                        line = prefix + todo['text']
                         attr = curses.color_pair(2) | curses.A_BOLD if i == current_index else 0
-                        stdscr.addstr(box_y + 2 + idx, box_x + 2, line[:box_w-4], attr)
+                        # Wrap the todo text
+                        wrapped_lines = wrap_text(todo['text'], text_width - len(prefix))
+                        for line_idx, line_text in enumerate(wrapped_lines):
+                            if display_line >= max_visible:
+                                break
+                            if line_idx == 0:
+                                line = prefix + line_text
+                            else:
+                                line = indent + line_text
+                            stdscr.addstr(box_y + 2 + display_line, box_x + 2, line[:text_width], attr)
+                            display_line += 1
             # Scroll indicators
             if start > 0:
                 stdscr.addstr(box_y + 1, box_x + box_w - 3, '↑', curses.color_pair(2) | curses.A_BOLD)
@@ -267,13 +338,7 @@ def main(stdscr):
         # Tab shortcuts
         if key == 20:  # Ctrl+T
             if len(tabs) < max_tabs:
-                curses.echo()
-                prompt = "New category name: "
-                stdscr.addstr(height - 4, 2, " " * (width - 4))
-                stdscr.addstr(height - 4, 2, prompt, curses.A_BOLD)
-                stdscr.refresh()
-                cat = stdscr.getstr(height - 4, 2 + len(prompt), 20).decode().strip()
-                curses.noecho()
+                cat = get_wrapped_input(stdscr, height - 4, 2, width - 4, 1, "New category name: ").strip()
                 if cat and cat not in tab_categories:
                     remove_deleted_category(cat)
                     tab_categories.append(cat)
@@ -320,21 +385,17 @@ def main(stdscr):
                 # Update tab list
                 tabs[current_tab] = load_todos(tab_categories[current_tab])
         elif key == ord('a'):
-            curses.echo()
-            prompt = "New task: "
             box_y = title_box_y + title_box_h + 2
             box_x = (width - min(50, width - 4)) // 2
             box_w = min(50, width - 4)
             box_h = min(max(10, len(tabs[current_tab]) + 5), height - title_box_h - 7)
-            stdscr.addstr(box_y + box_h - 2, box_x + 2, " " * (box_w - 4))
-            stdscr.addstr(box_y + box_h - 2, box_x + 2, prompt, curses.A_BOLD)
-            stdscr.refresh()
-            text = stdscr.getstr(box_y + box_h - 2, box_x + 2 + len(prompt), box_w - 4 - len(prompt)).decode()
+            input_width = box_w - 4
+            max_input_lines = 3  # Allow up to 3 lines for input
+            text = get_wrapped_input(stdscr, box_y + box_h - 4, box_x + 2, input_width, max_input_lines, "New task: ")
             if text.strip():
                 add_todo(text, tab_categories[current_tab])
                 tabs[current_tab] = load_todos(tab_categories[current_tab])
                 current_indices[current_tab] = len(tabs[current_tab]) - 1
-            curses.noecho()
         elif key == ord('d') and tabs[current_tab]:
             todos = tabs[current_tab]
             idx = current_indices[current_tab]
