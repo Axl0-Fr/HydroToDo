@@ -4,13 +4,8 @@ import os
 from datetime import datetime
 
 # HydroToDo Stable
-# Characters for rounded border
-TL = '╭'
-TR = '╮'
-BL = '╰'
-BR = '╯'
+# Character for separator
 H  = '─'
-V  = '│'
 
 DB_PATH = os.path.join(os.path.expanduser("~"), '.hydrotodo.db')
 
@@ -126,14 +121,6 @@ def delete_todos_by_category(category):
     c.execute('DELETE FROM todos WHERE category = ?', (category,))
     conn.commit()
     conn.close()
-
-
-def draw_rounded_box(win, y, x, h, w):
-    win.addstr(y, x, TL + H * (w - 2) + TR)
-    for i in range(1, h - 1):
-        win.addstr(y + i, x, V)
-        win.addstr(y + i, x + w - 1, V)
-    win.addstr(y + h - 1, x, BL + H * (w - 2) + BR)
 
 
 def wrap_text(text, width):
@@ -402,64 +389,65 @@ def main(stdscr):
             continue
 
 
-        # Title box
-        title_box_w = max(len(line) for line in ASCII_TITLE) + 4
-        title_box_h = len(ASCII_TITLE) + 2
-        # Ensures that the box does not exceed screen limits
-        if title_box_w > width:
-            title_box_w = width - 2 if width > 2 else width
-        if title_box_h > height:
-            title_box_h = height - 2 if height > 2 else height
-        title_box_x = max(0, (width - title_box_w) // 2)
-        title_box_y = 1
+        # Title
+        title_w = max(len(line) for line in ASCII_TITLE)
+        title_h = len(ASCII_TITLE)
+        title_x = max(0, (width - title_w) // 2)
+        title_y = 1
         # Only draws if it fits on screen
-        if title_box_y + title_box_h < height and title_box_x + title_box_w < width:
-            draw_rounded_box(stdscr, title_box_y, title_box_x, title_box_h, title_box_w)
+        if title_y + title_h < height and title_x + title_w < width:
             for i, line in enumerate(ASCII_TITLE):
-                if i + 1 + title_box_y < height and title_box_x + 2 < width:
-                    stdscr.addstr(title_box_y + 1 + i, title_box_x + 2, line[:max(0, width - title_box_x - 4)], curses.color_pair(3) | curses.A_BOLD)
+                if i + title_y < height and title_x < width:
+                    stdscr.addstr(title_y + i, title_x, line[:max(0, width - title_x)], curses.color_pair(3) | curses.A_BOLD)
 
         if show_help:
             # Centered help screen, but slightly lower
-            help_w = max(len(line) for line in help_lines) + 4
-            help_h = len(help_lines) + 2
+            help_w = max(len(line) for line in help_lines)
+            help_h = len(help_lines)
             help_x = (width - help_w) // 2
             help_y = max(2, (height - help_h) // 2 + height // 10)  # offset downwards
-            draw_rounded_box(stdscr, help_y, help_x, help_h, help_w)
             for i, line in enumerate(help_lines):
-                stdscr.addstr(help_y + 1 + i, help_x + 2, line, curses.color_pair(2) | curses.A_BOLD)
+                stdscr.addstr(help_y + i, help_x, line, curses.color_pair(2) | curses.A_BOLD)
         else:
-            # Tabs at the top (better highlight)
-            tab_strs = []
-            for i, cat in enumerate(tab_categories):
-                if i == current_tab:
-                    tab_strs.append(f"╭─[{cat}]─╮")
-                else:
-                    tab_strs.append(f"  {cat}  ")
-            tab_bar = " ".join(tab_strs)
-            stdscr.addstr(title_box_y + title_box_h, max(0, (width - len(tab_bar)) // 2), tab_bar, curses.color_pair(2) | curses.A_BOLD)
+            # Tabs at the top
+            tab_bar_y = title_y + title_h
+            x_offset = 0
+            
+            # Calculate total width to center the tab bar
+            tab_strs = [f" {cat} " for cat in tab_categories]
+            total_width = sum(len(s) for s in tab_strs) + (len(tab_strs) -1)
+            current_x = max(0, (width - total_width) // 2)
 
-            # Calculate available space for task box and detail panel
-            available_height = height - title_box_h - 6  # Leave room for help hint
+            for i, cat in enumerate(tab_categories):
+                display_str = f" {cat} "
+                attr = curses.color_pair(2) | curses.A_BOLD
+                if i == current_tab:
+                    attr = curses.A_REVERSE
+                stdscr.addstr(tab_bar_y, current_x, display_str, attr)
+                current_x += len(display_str) + 1
+
+
+            # Calculate available space for task list and detail panel
+            available_height = height - (title_y + title_h) - 6  # Leave room for help hint
             if show_preview:
-                box_h = 8  # Shorter fixed height for task box when preview is shown
+                box_h = 8  # Shorter fixed height for task list when preview is shown
                 detail_panel_h = max(10, available_height - box_h - 1)  # Detail panel gets remaining space
             else:
-                box_h = available_height  # Task box takes all space when preview is hidden
+                box_h = available_height  # Task list takes all space when preview is hidden
                 detail_panel_h = 0
 
-            # Main tab box (same width as title box)
-            box_w = title_box_w
-            box_x = title_box_x
-            box_y = title_box_y + title_box_h + 2
-            draw_rounded_box(stdscr, box_y, box_x, box_h, box_w)
+            # Main task list
+            box_w = title_w
+            box_x = title_x
+            box_y = title_y + title_h + 2
+            
             todos = tabs[current_tab]
             # Ensures the selected index is within the list size
             if current_indices[current_tab] >= len(todos):
                 current_indices[current_tab] = max(0, len(todos) - 1)
             current_index = current_indices[current_tab]
             # SCROLL for tasks
-            max_visible = max(1, box_h - 4)
+            max_visible = max(1, box_h)
             if len(todos) > max_visible:
                 if current_index < max_visible // 2:
                     start = 0
@@ -478,13 +466,13 @@ def main(stdscr):
                 stdscr.addstr(msg_y, msg_x, msg, curses.color_pair(2) | curses.A_BOLD)
             elif len(todos) > 0:
                 display_line = 0
-                text_width = box_w - 4  # Account for border and padding
+                text_width = box_w  # Account for border and padding
                 indent = "    "  # Indent for wrapped lines (same width as prefix)
                 for idx, i in enumerate(range(start, end)):
                     if 0 <= i < len(todos) and display_line < max_visible:
                         todo = todos[i]
                         prefix = "[X] " if todo['done'] else "[ ] "
-                        attr = curses.color_pair(2) | curses.A_BOLD if i == current_index else 0
+                        attr = curses.A_REVERSE if i == current_index else 0
                         # Wrap the todo text
                         wrapped_lines = wrap_text(todo['text'], text_width - len(prefix))
                         for line_idx, line_text in enumerate(wrapped_lines):
@@ -494,54 +482,53 @@ def main(stdscr):
                                 line = prefix + line_text
                             else:
                                 line = indent + line_text
-                            stdscr.addstr(box_y + 2 + display_line, box_x + 2, line[:text_width], attr)
+                            stdscr.addstr(box_y + display_line, box_x, line[:text_width], attr)
                             display_line += 1
             # Scroll indicators for tasks (on the right side)
             if start > 0:
-                stdscr.addstr(box_y + 1, box_x + box_w - 3, '↑', curses.color_pair(2) | curses.A_BOLD)
+                stdscr.addstr(box_y, box_x + box_w - 1, '↑', curses.color_pair(2) | curses.A_BOLD)
             if end < len(todos):
-                stdscr.addstr(box_y + box_h - 2, box_x + box_w - 3, '↓', curses.color_pair(2) | curses.A_BOLD)
+                stdscr.addstr(box_y + box_h -1, box_x + box_w - 1, '↓', curses.color_pair(2) | curses.A_BOLD)
 
-            # Detail panel below task box (only if preview is enabled)
+            # Detail panel below task list (only if preview is enabled)
             if show_preview and detail_panel_h > 0:
                 detail_y = box_y + box_h + 1
                 detail_w = box_w
                 detail_x = box_x
-                draw_rounded_box(stdscr, detail_y, detail_x, detail_panel_h, detail_w)
-
+                
             if show_preview and detail_panel_h > 0 and len(todos) > 0 and 0 <= current_index < len(todos):
                 selected_todo = todos[current_index]
-                detail_text_w = detail_w - 4
+                detail_text_w = detail_w
 
                 # Show task name at top of detail panel (with wrapping)
                 task_label = "Task: "
                 task_text = selected_todo['text']
-                stdscr.addstr(detail_y + 1, detail_x + 2, task_label, curses.color_pair(3) | curses.A_BOLD)
+                stdscr.addstr(detail_y, detail_x, task_label, curses.color_pair(3) | curses.A_BOLD)
 
                 # Wrap the task title
                 task_wrapped = wrap_text(task_text, detail_text_w - len(task_label))
                 task_display_lines = 0
                 for i, line in enumerate(task_wrapped[:2]):  # Max 2 lines for task title
                     if i == 0:
-                        stdscr.addstr(detail_y + 1, detail_x + 2 + len(task_label), line)
+                        stdscr.addstr(detail_y, detail_x + len(task_label), line)
                     else:
-                        stdscr.addstr(detail_y + 1 + i, detail_x + 2, " " * len(task_label) + line)
+                        stdscr.addstr(detail_y + i, detail_x, " " * len(task_label) + line)
                     task_display_lines += 1
 
                 # Created date
-                created_y = detail_y + 1 + task_display_lines
+                created_y = detail_y + task_display_lines
                 created_label = "Created: "
                 created_at = selected_todo.get('created_at', '')
                 if created_at:
-                    stdscr.addstr(created_y, detail_x + 2, created_label, curses.color_pair(4) | curses.A_BOLD)
-                    stdscr.addstr(created_y, detail_x + 2 + len(created_label), created_at)
+                    stdscr.addstr(created_y, detail_x, created_label, curses.color_pair(4) | curses.A_BOLD)
+                    stdscr.addstr(created_y, detail_x + len(created_label), created_at)
                 else:
-                    stdscr.addstr(created_y, detail_x + 2, created_label, curses.color_pair(4) | curses.A_BOLD)
-                    stdscr.addstr(created_y, detail_x + 2 + len(created_label), "(unknown)")
+                    stdscr.addstr(created_y, detail_x, created_label, curses.color_pair(4) | curses.A_BOLD)
+                    stdscr.addstr(created_y, detail_x + len(created_label), "(unknown)")
 
                 # Separator line
                 sep_y = created_y + 1
-                stdscr.addstr(sep_y, detail_x + 2, H * (detail_text_w), curses.color_pair(1))
+                stdscr.addstr(sep_y, detail_x, H * (detail_text_w), curses.color_pair(1))
 
                 # Notes section with timestamp
                 note_updated_at = selected_todo.get('note_updated_at', '')
@@ -551,11 +538,11 @@ def main(stdscr):
                     notes_label = "Notes: (press 'n' to edit)"
                 # Truncate if too long
                 notes_label = notes_label[:detail_text_w]
-                stdscr.addstr(sep_y + 1, detail_x + 2, notes_label, curses.color_pair(2) | curses.A_BOLD)
+                stdscr.addstr(sep_y + 1, detail_x, notes_label, curses.color_pair(2) | curses.A_BOLD)
 
                 # Calculate notes area
                 notes_start_y = sep_y + 2
-                max_notes_lines = detail_panel_h - (notes_start_y - detail_y) - 1  # Lines available for notes
+                max_notes_lines = detail_panel_h - (notes_start_y - detail_y)
 
                 # Build all wrapped notes lines
                 notes = selected_todo.get('notes', '')
@@ -579,20 +566,20 @@ def main(stdscr):
                     notes_end = min(notes_start + max_notes_lines, total_notes_lines)
 
                     for i, line in enumerate(all_notes_lines[notes_start:notes_end]):
-                        stdscr.addstr(notes_start_y + i, detail_x + 2, line)
+                        stdscr.addstr(notes_start_y + i, detail_x, line)
 
                     # Scroll indicators for notes (on the right side)
                     if notes_start > 0:
-                        stdscr.addstr(notes_start_y, detail_x + detail_w - 3, '↑', curses.color_pair(2) | curses.A_BOLD)
+                        stdscr.addstr(notes_start_y, detail_x + detail_w - 1, '↑', curses.color_pair(2) | curses.A_BOLD)
                     if notes_end < total_notes_lines:
-                        stdscr.addstr(notes_start_y + max_notes_lines - 1, detail_x + detail_w - 3, '↓', curses.color_pair(2) | curses.A_BOLD)
+                        stdscr.addstr(notes_start_y + max_notes_lines - 1, detail_x + detail_w - 1, '↓', curses.color_pair(2) | curses.A_BOLD)
                 else:
-                    stdscr.addstr(notes_start_y, detail_x + 2, "(no notes)", curses.color_pair(1))
+                    stdscr.addstr(notes_start_y, detail_x, "(no notes)", curses.color_pair(1))
 
                 # Mini guide embedded in the bottom border of detail panel (centered)
-                guide_text = " Alt-j/k: scroll │ Alt-p: toggle "
+                guide_text = " Alt-j/k: scroll | Alt-p: toggle "
                 guide_x = detail_x + (detail_w - len(guide_text)) // 2
-                guide_y = detail_y + detail_panel_h - 1  # On the bottom border line
+                guide_y = detail_y + detail_panel_h -1
                 stdscr.addstr(guide_y, guide_x, guide_text, curses.color_pair(1))
 
             elif show_preview and detail_panel_h > 0:
@@ -691,13 +678,17 @@ def main(stdscr):
                 # Update tab list
                 tabs[current_tab] = load_todos(tab_categories[current_tab])
         elif key == ord('a'):
-            box_y = title_box_y + title_box_h + 2
-            box_x = title_box_x
-            box_w = title_box_w
-            box_h = min(max(10, len(tabs[current_tab]) + 5), height - title_box_h - 7)
-            input_width = box_w - 4
-            max_input_lines = 3  # Allow up to 3 lines for input
-            text = get_wrapped_input(stdscr, box_y + box_h - 4, box_x + 2, input_width, max_input_lines, "New task: ")
+            # Recalculate positions for input
+            box_y = title_y + title_h + 2
+            box_x = title_x
+            box_w = title_w
+            available_height = height - (title_y + title_h) - 6
+            box_h = available_height if not show_preview else 8
+            
+            input_width = box_w
+            max_input_lines = 3
+            input_y = box_y + box_h - max_input_lines -1
+            text = get_wrapped_input(stdscr, input_y, box_x, input_width, max_input_lines, "New task: ")
             if text.strip():
                 add_todo(text, tab_categories[current_tab])
                 tabs[current_tab] = load_todos(tab_categories[current_tab])
@@ -719,29 +710,26 @@ def main(stdscr):
                 selected_todo = todos[idx]
                 current_notes = selected_todo.get('notes', '')
 
-                # Calculate detail panel position (same as drawing code)
-                available_height = height - title_box_h - 6
-                box_h = 8  # Matches the task box height
+                # Calculate detail panel position
+                available_height = height - (title_y + title_h) - 6
+                box_h = 8
                 detail_panel_h = max(10, available_height - box_h - 1)
-                detail_y = title_box_y + title_box_h + 2 + box_h + 1
-                detail_x = title_box_x
-                detail_w = title_box_w
+                detail_y = title_y + title_h + 2 + box_h + 1
+                detail_x = title_x
+                detail_w = title_w
 
-                # Calculate where notes editing area starts (after task title and separator)
-                notes_edit_y = detail_y + 4  # After task title (2 lines max) + separator + notes label
-                notes_edit_h = detail_panel_h - 6  # Leave room for header elements and bottom border
+                notes_edit_y = detail_y + 4
+                notes_edit_h = detail_panel_h - 5
 
-                # Show editing hint
                 edit_hint = "Editing notes... (Ctrl+F to save, Esc to cancel)"
-                stdscr.addstr(detail_y + 3, detail_x + 2, edit_hint + " " * (detail_w - 4 - len(edit_hint)), curses.color_pair(3) | curses.A_BOLD)
+                stdscr.addstr(detail_y + 3, detail_x, edit_hint + " " * (detail_w - len(edit_hint)), curses.color_pair(3) | curses.A_BOLD)
                 stdscr.refresh()
 
-                # Edit notes in the detail panel area
                 new_notes = edit_multiline_text(
                     stdscr,
                     notes_edit_y,
-                    detail_x + 2,
-                    detail_w - 4,
+                    detail_x,
+                    detail_w,
                     notes_edit_h,
                     current_notes
                 )
